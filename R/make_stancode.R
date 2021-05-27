@@ -65,6 +65,7 @@ make_stancode <- function(formula, data, family = gaussian(),
 .make_stancode <- function(bterms, data, prior, stanvars, 
                            threads = threading(), 
                            normalize = getOption("brms.normalize", TRUE),
+                           profiling = FALSE,
                            parse = getOption("brms.parse_stancode", FALSE), 
                            backend = getOption("brms.backend", "rstan"),
                            silent = TRUE, save_model = NULL, ...) {
@@ -233,7 +234,13 @@ make_stancode <- function(formula, data, family = gaussian(),
       collapse_stanvars(stanvars, "parameters"),
     "}\n"
   )
-  
+  if (profiling) {
+    profile_start <- "profile(\"transformed_parameters\") {\n"
+    profile_end <- "}\n"
+  } else {
+    profile_start <- NULL
+    profile_end <- NULL
+  }
   # generate transformed parameters block
   scode_transformed_parameters <- paste0(
     "transformed parameters {\n",
@@ -241,6 +248,7 @@ make_stancode <- function(formula, data, family = gaussian(),
       scode_ranef$tpar_def,
       scode_Xme$tpar_def,
       collapse_stanvars(stanvars, "tparameters", "start"),
+      profile_start,
       scode_predictor$tpar_prior,
       scode_ranef$tpar_prior,
       scode_Xme$tpar_prior,
@@ -248,22 +256,32 @@ make_stancode <- function(formula, data, family = gaussian(),
       scode_predictor$tpar_reg_prior,
       scode_ranef$tpar_comp,
       scode_Xme$tpar_comp,
+      profile_end,
       collapse_stanvars(stanvars, "tparameters", "end"),
     "}\n"
   )
   
   # combine likelihood with prior part
   not_const <- str_if(!normalize, " not")
+  if (profiling) {
+    profile_start <- "profile(\"model\") {\n"
+    profile_end <- "}\n"
+  } else {
+    profile_start <- NULL
+    profile_end <- NULL
+  }
   scode_model <- paste0(
     "model {\n",
+      profile_start,
       collapse_stanvars(stanvars, "model", "start"),
       "  // likelihood", not_const, " including constants\n",
       "  if (!prior_only) {\n",
       scode_predictor$model_lik,
       "  }\n", 
       "  // priors", not_const, " including constants\n",
-      scode_prior, 
+      scode_prior,
       collapse_stanvars(stanvars, "model", "end"),
+      profile_end,
     "}\n"
   )
   # generate generated quantities block
